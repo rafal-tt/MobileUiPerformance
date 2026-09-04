@@ -1,0 +1,235 @@
+<div data-type="panel-info">
+<p><strong>Sync metadata</strong> — Live page mirrored in GitHub for diffs. Section markers use <code>sync-begin:&lt;id&gt;</code> / <code>sync-end:&lt;id&gt;</code> (plain paragraphs). Edit Confluence or the repo mirror; reconcile with those markers.</p>
+<ul>
+<li>GitHub workspace: <a href="https://github.com/rafal-tt/MobileUiPerformance" data-card-appearance="inline"></a></li>
+<li>Local mirror path in repo: <code>confluence/4394024967-Mobile-app-UI-performance-improving-ideas.md</code></li>
+<li>Confluence page ID: <code>4394024967</code></li>
+<li>Published: <time datetime="2026-09-04">2026-09-04</time> · Source of truth for sync: prefer intentional edits; markers must stay intact</li>
+</ul>
+</div>
+
+<p><a href="https://ssi.atlassian.net/wiki/spaces/PEPRODUCTS/pages/3702128641/Mobile+app+UI+toolkits+performance+comparison" data-card-appearance="inline"></a></p>
+
+<hr>
+
+<p><code>sync-begin:scope</code></p>
+<h2>Scope</h2>
+<table>
+<thead>
+<tr><th>Status</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Out of scope (for now)</strong></td><td>Full app migration off MAUI (rewrite the whole UI in Flutter, Avalonia, Uno, native, etc.)</td></tr>
+<tr><td><strong>Possible / not considered</strong></td><td>Those full-migration paths — documented for later; no active spikes or planning</td></tr>
+<tr><td><strong>Currently considered</strong></td><td>Stay on MAUI as host; improve hotspots via WebView / Blazor / Skia-drawn UI / composition; optional partial Flutter add-to-app backup</td></tr>
+</tbody>
+</table>
+<p><strong>Already tried and not enough:</strong> visual-tree reduction and list virtualization (continue as hygiene only).</p>
+<p><code>sync-end:scope</code></p>
+
+<hr>
+
+<p><code>sync-begin:constraints</code></p>
+<h2>App constraints</h2>
+<table>
+<thead>
+<tr><th>Constraint</th><th>Detail</th></tr>
+</thead>
+<tbody>
+<tr><td>Scale</td><td>Large, complex MAUI app (multi-project; substantial UI surface)</td></tr>
+<tr><td>Platforms</td><td>Android + iOS; .NET MAUI 10</td></tr>
+<tr><td>Offline</td><td>Full offline mode; local data in Realm</td></tr>
+<tr><td>Look &amp; feel</td><td><strong>Same look on iOS and Android</strong> (not stock native Material vs UIKit)</td></tr>
+<tr><td>Design</td><td>Every component look and page layout is <strong>strictly defined in Figma</strong> — solution must allow styling or drawing controls to that spec</td></tr>
+<tr><td>Team</td><td>3 software engineers; deep C# / .NET MAUI; willing to learn new tech when justified</td></tr>
+<tr><td>Critical 3rd-party UI</td><td>PDF viewer, Rich Text Editor, Image editor — consolidating on <strong>Syncfusion</strong> (Telerik being removed)</td></tr>
+<tr><td>Other notable deps</td><td>Syncfusion ListView and related controls, custom WebView for HTML content, Firebase push, BLE, multi-customer overlays/branding</td></tr>
+</tbody>
+</table>
+<div data-type="panel-note">
+<p><strong>Design implication:</strong> Prefer approaches with high style control (own renderer or HTML/CSS design tokens). Stock platform defaults and unthemed vendor chrome are a poor fit. Third-party controls are acceptable only if theming can match Figma.</p>
+</div>
+<p><code>sync-end:constraints</code></p>
+
+<hr>
+
+<p><code>sync-begin:problems</code></p>
+<h2>Problems to solve</h2>
+<ol start="1">
+<li>
+<p><strong>Long UI creation time</strong> — Opening complex pages is too slow. Dominant cost is creating control handlers and initial layout (not CLR microbenchmarks). Visual-tree reduction alone is already practiced and insufficient.</p>
+</li>
+<li>
+<p><strong>Non-fluent list scrolling</strong> — Same root cause: creating UI for new cells exceeds the frame budget. List virtualization is already practiced and insufficient while cells remain expensive.</p>
+</li>
+<li>
+<p><strong>Rich text display (WebView sizing)</strong> — Backend/content often HTML. System WebView does not adapt size to content well inside native layout. Workarounds exist but are imperfect (sizing races, jumps, nested scroll issues).</p>
+</li>
+<li>
+<p><strong>Hard-to-locate memory leaks</strong> — Each platform view has a native peer; retention can be owned from either side, which makes root-cause analysis across the managed ↔ native bridge difficult.</p>
+</li>
+</ol>
+<div data-type="panel-info">
+<p><strong>Evidence (toolkit comparison, Galaxy S9):</strong> MAUI 10 programmatic Single Grid ~1548 ms vs Flutter ~134 ms, SkiaSharp-in-MAUI ~126 ms, WebView ~135 ms (warm). Language/framework microbenchmarks do not explain the UI gap. See the performance comparison page linked above.</p>
+</div>
+<p><code>sync-end:problems</code></p>
+
+<hr>
+
+<p><code>sync-begin:options-considered</code></p>
+<h2>Options currently considered (MAUI-hosted)</h2>
+
+<h3>A. Full-page UI in WebView (HTML/JS)</h3>
+<p>Render most of a page as HTML/CSS/JS; C# hosts shell, auth, offline bridge.</p>
+<table>
+<thead>
+<tr><th>Pros</th><th>Cons</th></tr>
+</thead>
+<tbody>
+<tr><td>Fast create/runtime in our tests (warm path)</td><td>System WebView variance across OEM/OS versions</td></tr>
+<tr><td>Natural fit for HTML from backend</td><td>Dynamic UI pushes work into JS/TS; harder debugging for this team</td></tr>
+<tr><td>Can ship page-by-page</td><td>Icon font → images/webfont migration; first-open cost; memory/leak surface</td></tr>
+<tr><td>Reuses existing WebView/auth patterns</td><td>Content-sized WebViews in lists remain hard</td></tr>
+</tbody>
+</table>
+
+<h3>B. Blazor Hybrid</h3>
+<p>MAUI shell hosts BlazorWebView; UI authored in C# + Razor inside the WebView.</p>
+<table>
+<thead>
+<tr><th>Pros</th><th>Cons</th></tr>
+</thead>
+<tbody>
+<tr><td>Stays closer to .NET skills than raw JS</td><td>Still system WebView–bound (create model ≠ Flutter/Skia for huge lists)</td></tr>
+<tr><td>Incremental page conversion; Core/services reusable</td><td>Dual toolkit (XAML + Razor); first paint / warm-up care needed</td></tr>
+<tr><td>Better debugging than a JS SPA for this team</td><td>Does not fix auto-height WebViews in lists by itself</td></tr>
+</tbody>
+</table>
+
+<h3>C. HTML regions only</h3>
+<p>Keep MAUI chrome/lists; use WebView only for rich HTML bodies (evolve current approach).</p>
+<table>
+<thead>
+<tr><th>Pros</th><th>Cons</th></tr>
+</thead>
+<tbody>
+<tr><td>Lowest effort; closest to today</td><td><strong>Does not</strong> fix dense page-open / scroll jank</td></tr>
+<tr><td>Best fit for rich-text <em>display</em> correctness</td><td>Many WebViews ⇒ memory/leak risk; sizing workarounds remain delicate</td></tr>
+<tr><td>Leaves Syncfusion editors on MAUI</td><td>CSS vs MAUI style drift if not tokenized</td></tr>
+</tbody>
+</table>
+
+<h3>D. Skia-drawn UI (custom layer / SkiaUi)</h3>
+<p>MAUI hosts one (or few) GPU Skia surfaces; measure/layout/paint/hit-test in C# for dense subtrees.</p>
+<table>
+<thead>
+<tr><th>Pros</th><th>Cons</th></tr>
+</thead>
+<tbody>
+<tr><td>Fast when the whole dense subtree is drawn (suite-class wins)</td><td>Building a control/layout framework (front-loaded effort)</td></tr>
+<tr><td>All C# — maintain, debug, extend, leak RCA aligned with the team</td><td>Does not solve HTML rich text alone</td></tr>
+<tr><td>Strong Figma + same iOS/Android look</td><td>Partial “draw some controls, keep MAUI layout” (e.g. DrawnUI-style) was only partly faster in tests</td></tr>
+<tr><td>Incremental after bridge + primitives exist</td><td>Must still host Syncfusion PDF/RTE/ImageEditor as MAUI islands</td></tr>
+</tbody>
+</table>
+
+<h3>E. Composition: Skia + WebView + MAUI Syncfusion</h3>
+<p>Skia for dense lists/grids; WebView for HTML bodies; Syncfusion MAUI for PDF / RTE / Image Editor.</p>
+<table>
+<thead>
+<tr><th>Pros</th><th>Cons</th></tr>
+</thead>
+<tbody>
+<tr><td>Right tool per problem; matches evidence + product pain</td><td>Clear ownership rules needed (multiple UI paradigms)</td></tr>
+<tr><td>Keeps critical commercial controls on MAUI</td><td>Team must document and enforce boundaries</td></tr>
+</tbody>
+</table>
+
+<h3>F. Backup — Flutter add-to-app islands (partial)</h3>
+<p>Keep MAUI app; embed Flutter only for worst screens. <strong>Not</strong> a full rewrite.</p>
+<table>
+<thead>
+<tr><th>Pros</th><th>Cons</th></tr>
+</thead>
+<tbody>
+<tr><td>Flutter create/scroll where it hurts most</td><td>Two UI stacks (Dart + C#); navigation/lifecycle glue</td></tr>
+<tr><td>No full-app rewrite</td><td>No first-class “Flutter inside MAUI” product — custom native wiring</td></tr>
+<tr><td>Can prove Flutter on one pilot screen</td><td>Harder long-term maintainability; use only if MAUI hybrids miss targets</td></tr>
+</tbody>
+</table>
+<p><code>sync-end:options-considered</code></p>
+
+<hr>
+
+<p><code>sync-begin:options-parking</code></p>
+<h2>Possible but not currently considered (full migration)</h2>
+<p>Kept for later if MAUI-hosted strategies cannot meet goals. <strong>No active planning.</strong></p>
+
+<h3>Flutter — full / large migration</h3>
+<table>
+<thead>
+<tr><th>Pros</th><th>Cons</th></tr>
+</thead>
+<tbody>
+<tr><td>Excellent UI create/scroll; hot reload; large ecosystem</td><td>Very large convert/test effort; learn Dart</td></tr>
+<tr><td>Same pixels iOS/Android; good Figma fit</td><td>Core/API rewrite or dual maintain; overlays/BLE/push/SSO rework</td></tr>
+<tr><td>Syncfusion Flutter PDF Viewer available</td><td>Syncfusion Flutter: no RTE, no Image Editor (alts TBD)</td></tr>
+</tbody>
+</table>
+
+<h3>Avalonia — full / large migration</h3>
+<table>
+<thead>
+<tr><th>Pros</th><th>Cons</th></tr>
+</thead>
+<tbody>
+<tr><td>Much faster UI create than MAUI in our suite; C# / possible Core reuse</td><td>Full UI convert upfront; mobile maturity/docs weaker than MAUI</td></tr>
+<tr><td>Own Skia-style rendering; Figma-friendly</td><td>Commercial control coverage TBD; platform integrations reworked</td></tr>
+</tbody>
+</table>
+
+<p>Also parking lot: Uno full migration; Compose/SwiftUI islands (poor fit for same look + Figma unless double-styled).</p>
+<p><code>sync-end:options-parking</code></p>
+
+<hr>
+
+<p><code>sync-begin:recommendation</code></p>
+<h2>Recommendation</h2>
+<div data-type="panel-success">
+<p><strong>Primary:</strong> Skia-drawn UI layer for dense pages/lists (all C#; Figma-friendly; suite-class performance when the whole dense subtree is drawn).</p>
+<p><strong>Parallel (required, lower effort):</strong> Harden HTML-region WebViews for rich-text display (fixed/locked height; prefer detail WebView over many auto-height cells; aggressive dispose).</p>
+<p><strong>Keep as MAUI islands:</strong> Syncfusion PDF viewer, Rich Text Editor, Image Editor.</p>
+<p><strong>Target end shape:</strong> composition — Skia for density, WebView for HTML bodies, Syncfusion for editors.</p>
+</div>
+
+<table>
+<thead>
+<tr><th>Not primary</th><th>Why</th></tr>
+</thead>
+<tbody>
+<tr><td>Full Flutter / Avalonia</td><td>Out of scope; rewrite cost</td></tr>
+<tr><td>Full-page HTML/JS WebView as default</td><td>Strong create perf; weaker maintain/debug/extend for this team</td></tr>
+<tr><td>Blazor Hybrid as default</td><td>Better than JS for C#, still WebView-taxed; weaker for huge recycled lists vs Skia</td></tr>
+<tr><td>MAUI-only further tuning</td><td>Already insufficient</td></tr>
+<tr><td>Flutter add-to-app</td><td>Backup only if Skia + HTML regions miss targets</td></tr>
+</tbody>
+</table>
+
+<h3>Suggested next steps</h3>
+<ol start="1">
+<li>Time-box Skia bridge + few primitives → one real product hotspot styled to Figma; measure create, scroll, memory.</li>
+<li>In parallel, ship HTML-region sizing/lifecycle fixes.</li>
+<li>If proven, grow Skia control set and roll more dense screens; compose with WebView + Syncfusion.</li>
+<li>Only then consider Flutter add-to-app backup or reopen full-migration parking lot.</li>
+</ol>
+<p><code>sync-end:recommendation</code></p>
+
+<hr>
+
+<p><code>sync-begin:footer</code></p>
+<h2>Working notes</h2>
+<p>Detailed working notes (decision tree, dependency inventory, option deep-dives) live in:</p>
+<p><a href="https://github.com/rafal-tt/MobileUiPerformance" data-card-appearance="inline"></a></p>
+<p>Related measurement write-up:</p>
+<p><a href="https://ssi.atlassian.net/wiki/spaces/PEPRODUCTS/pages/3702128641/Mobile+app+UI+toolkits+performance+comparison" data-card-appearance="inline"></a></p>
+<p><code>sync-end:footer</code></p>

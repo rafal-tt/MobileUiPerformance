@@ -37,6 +37,7 @@ Details: [findings/top-issues.md](findings/top-issues.md).
 | [considerations/app.md](considerations/app.md) | App scale, offline, Figma-strict same iOS·Android look, critical UI |
 | [considerations/options.md](considerations/options.md) | Options + **current recommendation** (SkiaUi primary, HTML regions parallel) |
 | [considerations/migration-dependencies.md](considerations/migration-dependencies.md) | Deps to validate for Flutter / Avalonia / non-MAUI |
+| [confluence/](confluence/) | Published Confluence mirror + sync markers ([SYNC.md](confluence/SYNC.md)) |
 | [considerations/](considerations/) | Cross-cutting risks, constraints, open questions |
 
 ## Workflow
